@@ -1,0 +1,13 @@
+# Ignorar scripts locais com credenciais privadas e caminhos do sistema
+app.py
+Download_Relatorio_Senior.vbs
+
+# Ignorar caches do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Outros arquivos do sistema
+.DS_Store
+Thumbs.db

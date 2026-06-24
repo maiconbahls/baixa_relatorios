@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Relatórios</title>
+    
+    <!-- Google Fonts: Outfit and Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- SheetJS for client-side Excel generation -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Background Animated Gradient Blurs -->
+    <div class="bg-blur blur-1"></div>
+    <div class="bg-blur blur-2"></div>
+    <div class="bg-blur blur-3"></div>
+
+    <!-- 1. PORTAL LOGIN SCREEN -->
+    <div id="login-container" class="login-card-wrapper active">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="logo-icon">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h1>Acesso Restrito</h1>
+                <p>Insira as credenciais do portal de gestão para continuar</p>
+            </div>
+            
+            <form id="portal-login-form">
+                <div class="input-group">
+                    <label for="portal-username">Usuário</label>
+                    <div class="input-wrapper">
+                        <i class="fa-regular fa-user input-icon"></i>
+                        <input type="text" id="portal-username" placeholder="Digite seu usuário..." required autocomplete="off">
+                    </div>
+                </div>
+                
+                <div class="input-group">
+                    <label for="portal-password">Senha</label>
+                    <div class="input-wrapper">
+                        <i class="fa-regular fa-lock input-icon"></i>
+                        <input type="password" id="portal-password" placeholder="Digite sua senha..." required>
+                        <i class="fa-regular fa-eye toggle-password" onclick="togglePasswordVisibility('portal-password', this)"></i>
+                    </div>
+                </div>
+                
+                <div id="login-error" class="error-alert hidden">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span>Usuário ou senha inválidos.</span>
+                </div>
+                
+                <button type="submit" class="btn-primary btn-full">
+                    <span>Entrar no Portal</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. DASHBOARD SCREEN -->
+    <div id="dashboard-container" class="dashboard-wrapper hidden">
+        <!-- Top Navigation -->
+        <header class="app-header">
+            <div class="header-logo">
+                <div class="logo-small">
+                    <i class="fa-solid fa-file-invoice"></i>
+                </div>
+                <div>
+                    <h2>Portal</h2>
+                    <p class="subtitle">Gerador de Relatórios Senior / Interview</p>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <span class="user-badge">
+                    <i class="fa-solid fa-circle-user"></i>
+                    <span>Gestor</span>
+                </span>
+                <button class="btn-logout" id="btn-logout">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                    <span>Sair</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Layout -->
+        <main class="dashboard-content">
+            <!-- Left Side: Credentials and Setup -->
+            <section class="config-panel">
+                <div class="card glass">
+                    <div class="card-header">
+                        <i class="fa-solid fa-key-skeleton header-icon"></i>
+                        <div>
+                            <h3>Credenciais do Interview</h3>
+                            <p>Insira suas credenciais de acesso</p>
+                        </div>
+                    </div>
+                    
+                    <div class="card-body">
+                        <div class="input-group">
+                            <label for="interview-username">Usuário do Interview</label>
+                            <div class="input-wrapper">
+                                <i class="fa-regular fa-user input-icon"></i>
+                                <input type="text" id="interview-username" placeholder="ex: usuario.sobrenome" autocomplete="username">
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="interview-password">Senha do Interview</label>
+                            <div class="input-wrapper">
+                                <i class="fa-regular fa-lock input-icon"></i>
+                                <input type="password" id="interview-password" placeholder="Digite sua senha..." autocomplete="current-password">
+                                <i class="fa-regular fa-eye toggle-password" onclick="togglePasswordVisibility('interview-password', this)"></i>
+                            </div>
+                        </div>
+
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="save-credentials" checked>
+                            <label for="save-credentials">
+                                <span class="custom-checkbox"></span>
+                                Salvar credenciais localmente (seguro no navegador)
+                            </label>
+                        </div>
+
+                        <hr class="divider">
+
+                        <div class="input-group">
+                            <label for="report-id">Relatório para Download</label>
+                            <div class="select-wrapper">
+                                <select id="report-id-select" onchange="handleReportSelectChange(this)">
+                                    <option value="all" selected>Todos os Relatórios (Download em Lote)</option>
+                                    <option value="132">Colaborador Senior (ID 132)</option>
+                                    <option value="310">Colaboradores Grupo - Geral (ID 310)</option>
+                                    <option value="316">Colaboradores Senior - MS (ID 316)</option>
+                                    <option value="372">Colaboradores com Posto de Trabalho (ID 372)</option>
+                                    <option value="custom">Outro Relatório (Digitar ID manual)</option>
+                                </select>
+                                <i class="fa-solid fa-chevron-down select-icon"></i>
+                            </div>
+                            
+                            <div class="input-wrapper mt-2 hidden" id="custom-report-id-wrapper">
+                                <i class="fa-regular fa-hashtag input-icon"></i>
+                                <input type="number" id="custom-report-id" placeholder="Digite o ID do relatório..." min="1">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Side: Actions and Status Log -->
+            <section class="actions-panel">
+                <div class="card glass flex-column justify-between h-full">
+                    <div class="card-header">
+                        <i class="fa-solid fa-gears header-icon"></i>
+                        <div>
+                            <h3>Controle e Automação</h3>
+                            <p>Execução e acompanhamento do download</p>
+                        </div>
+                    </div>
+                    
+                    <div class="card-body action-layout">
+                        <!-- Big Download Button -->
+                        <button id="btn-download" class="btn-download-massive">
+                            <div class="pulse-ring"></div>
+                            <div class="btn-download-content">
+                                <i class="fa-solid fa-cloud-arrow-down main-btn-icon"></i>
+                                <span class="main-btn-text">Iniciar Integração</span>
+                                <span class="main-btn-sub">Efetuar login e obter dados</span>
+                            </div>
+                        </button>
+                        
+                        <!-- Terminal Log Panel -->
+                        <div class="terminal-panel">
+                            <div class="terminal-header">
+                                <div class="terminal-dots">
+                                    <span class="dot red"></span>
+                                    <span class="dot yellow"></span>
+                                    <span class="dot green"></span>
+                                </div>
+                                <span class="terminal-title">status_console.log</span>
+                            </div>
+                            <div class="terminal-body" id="terminal-log">
+                                <div class="log-line text-muted">Aguardando início do processo...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Bottom: Data Preview Grid -->
+            <section class="preview-panel full-width">
+                <div class="card glass">
+                    <div class="card-header flex-row items-center justify-between">
+                        <div class="flex-row items-center">
+                            <i class="fa-solid fa-table-list header-icon"></i>
+                            <div>
+                                <h3>Visualização Prévia dos Dados</h3>
+                                <p id="preview-subtitle">Nenhum dado carregado ainda.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Preview Controls (Hidden until data loaded) -->
+                        <div id="preview-controls" class="preview-controls hidden">
+                            <div class="search-box">
+                                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                                <input type="text" id="preview-search" placeholder="Filtrar nesta visualização..." onkeyup="filterPreviewData(this.value)">
+                            </div>
+                            <button id="btn-export-excel" class="btn-success" onclick="triggerExcelDownload()">
+                                <i class="fa-solid fa-file-excel"></i>
+                                <span>Salvar Excel completo</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card-body no-padding table-scroll-container">
+                        <div id="table-placeholder" class="table-placeholder">
+                            <i class="fa-solid fa-database placeholder-icon"></i>
+                            <p>Após iniciar a integração com sucesso, uma amostra dos dados aparecerá aqui.</p>
+                        </div>
+                        <table id="data-preview-table" class="data-table hidden">
+                            <thead>
+                                <tr id="table-headers">
+                                    <!-- Dynamic headers will be placed here -->
+                                </tr>
+                            </thead>
+                            <tbody id="table-body">
+                                <!-- Dynamic rows will be placed here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast-notification" class="toast-wrapper hidden">
+        <div class="toast-card">
+            <i class="fa-solid fa-circle-check toast-icon" id="toast-icon"></i>
+            <div class="toast-content">
+                <h4 id="toast-title">Sucesso!</h4>
+                <p id="toast-message">Relatório baixado.</p>
+            </div>
+            <button class="toast-close" onclick="closeToast()">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Custom Script -->
+    <script src="script.js"></script>
+</body>
+</html>
