@@ -7,7 +7,7 @@ Dim responseText, cookieHeader, cookie
 Dim objExcel, objWorkbook, objWorksheet, recordCount
 Dim userProfile, defaultDestino, diretorioDestino, dataAtual, nomeArquivo, caminhoCompleto
 Dim opcao, fileBaseName, i, totalSuccess
-Dim inBatch, shellApp, folderObj
+Dim inBatch
 Dim tsvContent, tempFolder, tempFileName, tempFilePath, tempFile
 
 Dim reportListId, reportListFile, reportListName
@@ -112,7 +112,7 @@ If Not inBatch Then
     End Select
 End If
 
-' 3. Definir pasta de destino de forma DINAMICA (funciona no PC de qualquer pessoa)
+' 3. Definir pasta de destino de forma DINAMICA
 userProfile = objShell.ExpandEnvironmentStrings("%USERPROFILE%")
 defaultDestino = objFSO.BuildPath(userProfile, "Cocal\Recursos Humanos - 09_Selects\AUTOMAÇÃO")
 
@@ -121,23 +121,13 @@ If Not objFSO.FolderExists(defaultDestino) Then
     On Error Resume Next
     CreateFolderChain objFSO, defaultDestino
     If Err.Number <> 0 Then
-        ' Caso falhe (usuario nao tem a estrutura Cocal), usa a pasta onde o script esta rodando
         defaultDestino = objFSO.GetParentFolderName(WScript.ScriptFullName)
     End If
     On Error GoTo 0
 End If
 
-' Abre a caixa de selecao de pasta nativa do Windows
-On Error Resume Next
-Set shellApp = CreateObject("Shell.Application")
-Set folderObj = shellApp.BrowseForFolder(0, "Selecione a pasta onde os relatorios serão salvos:", &H0010 + &H0040, defaultDestino)
-
-If Err.Number = 0 And Not folderObj Is Nothing Then
-    diretorioDestino = folderObj.Self.Path
-Else
-    diretorioDestino = defaultDestino
-End If
-On Error GoTo 0
+' Abrir caixa de selecao de pasta moderna do Windows
+diretorioDestino = SelecionarPasta(defaultDestino)
 
 ' 4. Criar objeto HTTP com suporte a cookies e Headers de Navegador Real (Chrome)
 Set xml = CreateObject("MSXML2.ServerXMLHTTP.6.0")
@@ -342,6 +332,47 @@ Else
            "Registros baixados: " & recordCount & vbCrLf & _
            "Salvo em: " & caminhoCompleto, vbInformation, "Sucesso"
 End If
+
+' Funcao para selecionar a pasta usando o dialogo moderno do Windows (via PowerShell)
+Function SelecionarPasta(defaultPath)
+    Dim psCommand, objExec, output, pathEscopo
+    
+    ' Escapar aspas simples para o PowerShell nao quebrar o caminho
+    pathEscopo = Replace(defaultPath, "'", "''")
+    
+    psCommand = "powershell -NoProfile -Command ""& {" & _
+                "Add-Type -AssemblyName System.Windows.Forms;" & _
+                "$f = New-Object System.Windows.Forms.FolderBrowserDialog;" & _
+                "$f.Description = 'Selecione a pasta onde deseja salvar os relatorios Excel:';" & _
+                "$f.SelectedPath = '" & pathEscopo & "';" & _
+                "$f.ShowNewFolderButton = $true;" & _
+                "[void]$f.ShowDialog();" & _
+                "$f.SelectedPath" & _
+                "}"""
+                
+    On Error Resume Next
+    Set objExec = objShell.Exec(psCommand)
+    If Err.Number <> 0 Then
+        ' Fallback caso o PowerShell falhe
+        SelecionarPasta = defaultPath
+        Exit Function
+    End If
+    
+    Do While objExec.Status = 0
+        WScript.Sleep 50
+    Loop
+    output = Trim(objExec.StdOut.ReadAll())
+    On Error GoTo 0
+    
+    output = Replace(output, vbCr, "")
+    output = Replace(output, vbLf, "")
+    
+    If output <> "" Then
+        SelecionarPasta = output
+    Else
+        SelecionarPasta = defaultPath
+    End If
+End Function
 
 ' Função recursiva para criar a árvore de pastas
 Sub CreateFolderChain(fso, path)
