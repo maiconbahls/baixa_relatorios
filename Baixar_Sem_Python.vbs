@@ -1,7 +1,7 @@
 ' VBScript para Baixar Relatorio do Interview sem precisar de Python
 Option Explicit
 
-Dim objShell, objFSO, xml, html, window
+Dim objShell, objFSO, xml, html
 Dim usuario, senha, reportId, loginUrl, dataUrl, payload
 Dim responseText, cookieHeader, cookie
 Dim objExcel, objWorkbook, objWorksheet, recordCount
@@ -52,12 +52,15 @@ jsCode = "function generateTSV(jsonText) {" & _
          "}" & _
          "function getRecordCount(jsonText) {" & _
          "    return JSON.parse(jsonText).valores.length;" & _
+         "}" & _
+         "function encodeURI(str) {" & _
+         "    return encodeURIComponent(str);" & _
          "}"
 
-' 1. Criar HTMLFile temporario injetando o script diretamente no HTML para evitar o execScript (depreciado no Windows moderno)
+' 1. Criar HTMLFile temporario injetando o script diretamente no HTML
+' Usamos html.Script para chamar as funcoes, o que evita depender de html.parentWindow (que e bloqueado em alguns PCs)
 Set html = CreateObject("htmlfile")
 html.write "<html><head><meta http-equiv=""x-ua-compatible"" content=""IE=9""><script>" & jsCode & "</script></head><body></body></html>"
-Set window = html.parentWindow
 
 ' 2. Solicitar credenciais ao usuario de forma amigavel
 usuario = InputBox("Digite seu usuario do Interview:", "Login Interview - Cocal", "maicon.bahls")
@@ -148,7 +151,7 @@ On Error GoTo 0
 loginUrl = "http://reportview.cocal.com.br/login.php"
 
 ' Codificar dados para evitar problemas com caracteres especiais (como @, #, $, etc.)
-payload = "usuario=" & window.encodeURIComponent(usuario) & "&senha=" & window.encodeURIComponent(senha)
+payload = "usuario=" & html.Script.encodeURI(usuario) & "&senha=" & html.Script.encodeURI(senha)
 
 ' 5. Efetuar Login (com cabecalho disfarce para simular Chrome)
 On Error Resume Next
@@ -219,7 +222,7 @@ If inBatch Then
             ' Verificar se retornou JSON valido
             If InStr(responseText, "Login - Interview") = 0 And InStr(responseText, "<!doctype html") = 0 Then
                 ' Converter JSON para TSV usando JavaScript
-                tsvContent = window.generateTSV(responseText)
+                tsvContent = html.Script.generateTSV(responseText)
                 
                 ' Criar arquivo temporario em formato Unicode (UTF-16 LE)
                 tempFolder = objFSO.GetSpecialFolder(2) ' Pasta Temp do Windows
@@ -290,8 +293,8 @@ Else
     
     ' Obter contagem de registros e converter para TSV
     On Error Resume Next
-    recordCount = window.getRecordCount(responseText)
-    tsvContent = window.generateTSV(responseText)
+    recordCount = html.Script.getRecordCount(responseText)
+    tsvContent = html.Script.generateTSV(responseText)
     
     If Err.Number <> 0 Then
         objExcel.Quit
