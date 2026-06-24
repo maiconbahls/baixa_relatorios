@@ -60,7 +60,9 @@ jsCode = "function generateTSV(jsonText) {" & _
 ' 1. Criar HTMLFile temporario injetando o script diretamente no HTML
 ' Usamos html.Script para chamar as funcoes, o que evita depender de html.parentWindow (que e bloqueado em alguns PCs)
 Set html = CreateObject("htmlfile")
+html.open
 html.write "<html><head><meta http-equiv=""x-ua-compatible"" content=""IE=9""><script>" & jsCode & "</script></head><body></body></html>"
+html.close
 
 ' 2. Solicitar credenciais ao usuario de forma amigavel
 usuario = InputBox("Digite seu usuario do Interview:", "Login Interview - Cocal", "maicon.bahls")
