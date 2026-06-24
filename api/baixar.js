@@ -41,7 +41,8 @@ module.exports = async (req, res) => {
             method: 'POST',
             body: params,
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             },
             redirect: 'manual'
         });
@@ -58,7 +59,8 @@ module.exports = async (req, res) => {
         const dataUrl = `http://${domain}/relatorio/dados.php?id=${id}`;
         const dataResponse = await fetch(dataUrl, {
             headers: {
-                'Cookie': cookie
+                'Cookie': cookie,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
         });
 
