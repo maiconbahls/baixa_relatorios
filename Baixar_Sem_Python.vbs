@@ -5,9 +5,10 @@ Dim objShell, objFSO, xml, html, window
 Dim usuario, senha, reportId, loginUrl, dataUrl, payload
 Dim responseText, cookieHeader, cookie
 Dim objExcel, objWorkbook, objWorksheet, recordCount
-Dim defaultDestino, diretorioDestino, dataAtual, nomeArquivo, caminhoCompleto
+Dim userProfile, defaultDestino, diretorioDestino, dataAtual, nomeArquivo, caminhoCompleto
 Dim opcao, fileBaseName, i, totalSuccess
 Dim inBatch, shellApp, folderObj
+Dim tsvContent, tempFolder, tempFileName, tempFilePath, tempFile
 
 Dim reportListId, reportListFile, reportListName
 reportListId = Array("132", "310", "316", "372")
@@ -22,29 +23,40 @@ Set html = CreateObject("htmlfile")
 html.write "<meta http-equiv=""x-ua-compatible"" content=""IE=9"">"
 Set window = html.parentWindow
 
-' Inserir a funcao JavaScript que vai popular o Excel diretamente (super rapido e sem bugs de conversao de array)
+' Inserir a funcao JavaScript que vai converter o JSON em TSV de forma ultra rapida
 Dim jsCode
-jsCode = "function populateExcel(sheet, jsonText) {" & _
+jsCode = "function generateTSV(jsonText) {" & _
          "    var data = JSON.parse(jsonText);" & _
          "    var colunas = data.colunas;" & _
          "    var valores = data.valores;" & _
+         "    var lines = [];" & _
+         "    var header = [];" & _
          "    for (var c = 0; c < colunas.length; c++) {" & _
-         "        sheet.Cells(1, c + 1).Value = colunas[c].title || colunas[c];" & _
+         "        header.push(colunas[c].title || colunas[c]);" & _
          "    }" & _
+         "    lines.push(header.join('\t'));" & _
          "    for (var r = 0; r < valores.length; r++) {" & _
          "        var row = valores[r];" & _
+         "        var line = [];" & _
          "        for (var c = 0; c < row.length; c++) {" & _
          "            var val = row[c];" & _
-         "            if (val !== null && val !== undefined) {" & _
-         "                if (!isNaN(val) && val !== '' && val.indexOf('0') !== 0) {" & _
-         "                    sheet.Cells(r + 2, c + 1).Value = Number(val);" & _
+         "            if (val === null || val === undefined) {" & _
+         "                line.push('');" & _
+         "            } else {" & _
+         "                var valStr = val.toString();" & _
+         "                if (!isNaN(valStr) && valStr !== '' && valStr.indexOf('0') === 0 && valStr.length > 1) {" & _
+         "                    line.push('=\u0022' + valStr + '\u0022');" & _
          "                } else {" & _
-         "                    sheet.Cells(r + 2, c + 1).Value = val;" & _
+         "                    line.push(valStr.replace(/\t/g, ' ').replace(/\r?\n/g, ' '));" & _
          "                }" & _
          "            }" & _
          "        }" & _
+         "        lines.push(line.join('\t'));" & _
          "    }" & _
-         "    return valores.length;" & _
+         "    return lines.join('\r\n');" & _
+         "}" & _
+         "function getRecordCount(jsonText) {" & _
+         "    return JSON.parse(jsonText).valores.length;" & _
          "}"
 
 window.execScript jsCode, "JScript"
@@ -100,15 +112,16 @@ If Not inBatch Then
     End Select
 End If
 
-' 3. Definir pasta de destino interativamente
-defaultDestino = "C:\Users\maicon.bahls\Cocal\Recursos Humanos - 09_Selects\AUTOMAÇÃO"
+' 3. Definir pasta de destino de forma DINAMICA (funciona no PC de qualquer pessoa)
+userProfile = objShell.ExpandEnvironmentStrings("%USERPROFILE%")
+defaultDestino = objFSO.BuildPath(userProfile, "Cocal\Recursos Humanos - 09_Selects\AUTOMAÇÃO")
 
 ' Se a pasta padrao nao existir, tenta cria-la
 If Not objFSO.FolderExists(defaultDestino) Then
     On Error Resume Next
     CreateFolderChain objFSO, defaultDestino
     If Err.Number <> 0 Then
-        ' Caso falhe, usa a pasta onde o script esta
+        ' Caso falhe (usuario nao tem a estrutura Cocal), usa a pasta onde o script esta rodando
         defaultDestino = objFSO.GetParentFolderName(WScript.ScriptFullName)
     End If
     On Error GoTo 0
@@ -117,13 +130,11 @@ End If
 ' Abre a caixa de selecao de pasta nativa do Windows
 On Error Resume Next
 Set shellApp = CreateObject("Shell.Application")
-' &H0010 = BIF_RETURNONLYFSDIRS (somente pastas reais), &H0040 = BIF_USENEWUI (visual moderno com botao de criar pasta)
 Set folderObj = shellApp.BrowseForFolder(0, "Selecione a pasta onde os relatorios serão salvos:", &H0010 + &H0040, defaultDestino)
 
 If Err.Number = 0 And Not folderObj Is Nothing Then
     diretorioDestino = folderObj.Self.Path
 Else
-    ' Se o usuario cancelar ou fechar a janela, usa a pasta padrao
     diretorioDestino = defaultDestino
 End If
 On Error GoTo 0
@@ -168,7 +179,7 @@ If InStr(responseText, "Login - Interview") > 0 Or InStr(responseText, "<!doctyp
     WScript.Quit
 End If
 
-' 6. Iniciar Excel
+' 6. Iniciar Excel de forma oculta
 On Error Resume Next
 Set objExcel = CreateObject("Excel.Application")
 If Err.Number <> 0 Then
@@ -178,9 +189,11 @@ End If
 On Error GoTo 0
 
 objExcel.Visible = False
+objExcel.DisplayAlerts = False ' Evita que o Excel mostre caixas de dialogo de confirmacao
+
 dataAtual = Replace(FormatDateTime(Date, 2), "/", "-")
 
-' 7. Executar Downloads e Salvar
+' 7. Executar Downloads e Salvar de forma ultra rapida via arquivos temporarios
 If inBatch Then
     totalSuccess = 0
     For i = 0 To UBound(reportListId)
@@ -203,10 +216,23 @@ If inBatch Then
             
             ' Verificar se retornou JSON valido
             If InStr(responseText, "Login - Interview") = 0 And InStr(responseText, "<!doctype html") = 0 Then
-                Set objWorkbook = objExcel.Workbooks.Add()
+                ' Converter JSON para TSV usando JavaScript
+                tsvContent = window.generateTSV(responseText)
+                
+                ' Criar arquivo temporario em formato Unicode (UTF-16 LE)
+                tempFolder = objFSO.GetSpecialFolder(2) ' Pasta Temp do Windows
+                tempFileName = objFSO.GetTempName() & ".txt"
+                tempFilePath = objFSO.BuildPath(tempFolder, tempFileName)
+                
+                Set tempFile = objFSO.CreateTextFile(tempFilePath, True, True) ' True como 3o param escreve como Unicode
+                tempFile.Write tsvContent
+                tempFile.Close
+                
+                ' Abrir o arquivo temporario no Excel
+                Set objWorkbook = objExcel.Workbooks.Open(tempFilePath)
                 Set objWorksheet = objWorkbook.Sheets(1)
                 
-                recordCount = window.populateExcel(objWorksheet, responseText)
+                ' Auto-ajustar colunas
                 objWorksheet.UsedRange.Columns.AutoFit
                 
                 nomeArquivo = reportListFile(i) & "_" & dataAtual & ".xlsx"
@@ -217,13 +243,18 @@ If inBatch Then
                     objFSO.DeleteFile caminhoCompleto, True
                 End If
                 
-                objWorkbook.SaveAs caminhoCompleto
+                ' Salvar como XLSX (formato 51 = xlOpenXMLWorkbook)
+                objWorkbook.SaveAs caminhoCompleto, 51
                 objWorkbook.Close True
+                
+                ' Excluir arquivo temporario
+                objFSO.DeleteFile tempFilePath, True
+                
                 totalSuccess = totalSuccess + 1
             End If
         End If
         On Error GoTo 0
-        WScript.Sleep 500 ' Pausa curta para nao sobrecarregar o servidor
+        WScript.Sleep 300 ' Pausa curta para nao sobrecarregar o servidor
     Next
     
     objExcel.Quit
@@ -255,19 +286,32 @@ Else
         responseText = Mid(responseText, 2)
     End If
     
-    Set objWorkbook = objExcel.Workbooks.Add()
-    Set objWorksheet = objWorkbook.Sheets(1)
-    
+    ' Obter contagem de registros e converter para TSV
     On Error Resume Next
-    recordCount = window.populateExcel(objWorksheet, responseText)
+    recordCount = window.getRecordCount(responseText)
+    tsvContent = window.generateTSV(responseText)
+    
     If Err.Number <> 0 Then
-        objWorkbook.Close False
         objExcel.Quit
         MsgBox "Falha ao processar os dados recebidos: " & Err.Description, vbCritical, "Erro no JSON"
         WScript.Quit
     End If
     On Error GoTo 0
     
+    ' Criar arquivo temporario em formato Unicode (UTF-16 LE)
+    tempFolder = objFSO.GetSpecialFolder(2)
+    tempFileName = objFSO.GetTempName() & ".txt"
+    tempFilePath = objFSO.BuildPath(tempFolder, tempFileName)
+    
+    Set tempFile = objFSO.CreateTextFile(tempFilePath, True, True)
+    tempFile.Write tsvContent
+    tempFile.Close
+    
+    ' Abrir no Excel
+    Set objWorkbook = objExcel.Workbooks.Open(tempFilePath)
+    Set objWorksheet = objWorkbook.Sheets(1)
+    
+    ' Auto-ajustar colunas
     objWorksheet.UsedRange.Columns.AutoFit
     
     nomeArquivo = fileBaseName & "_" & dataAtual & ".xlsx"
@@ -279,10 +323,15 @@ Else
         On Error GoTo 0
     End If
     
+    ' Salvar como XLSX (formato 51)
     On Error Resume Next
-    objWorkbook.SaveAs caminhoCompleto
+    objWorkbook.SaveAs caminhoCompleto, 51
     objWorkbook.Close True
     objExcel.Quit
+    
+    ' Deletar arquivo temporario
+    objFSO.DeleteFile tempFilePath, True
+    
     If Err.Number <> 0 Then
         MsgBox "Erro ao salvar a planilha em: " & caminhoCompleto & vbCrLf & Err.Description, vbCritical, "Erro ao Salvar"
         WScript.Quit
