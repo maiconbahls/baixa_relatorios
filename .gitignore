@@ -11,3 +11,8 @@ __pycache__/
 # Outros arquivos do sistema
 .DS_Store
 Thumbs.db
+
+# Ignorar planilhas de dados locais e resultados gerados
+SELECT/
+*.xlsx
+*.xls
