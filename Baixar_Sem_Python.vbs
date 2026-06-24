@@ -5,9 +5,9 @@ Dim objShell, objFSO, xml, html, window
 Dim usuario, senha, reportId, loginUrl, dataUrl, payload
 Dim responseText, cookieHeader, cookie
 Dim objExcel, objWorkbook, objWorksheet, recordCount
-Dim diretorioDestino, dataAtual, nomeArquivo, caminhoCompleto
+Dim defaultDestino, diretorioDestino, dataAtual, nomeArquivo, caminhoCompleto
 Dim opcao, fileBaseName, i, totalSuccess
-Dim inBatch
+Dim inBatch, shellApp, folderObj
 
 Dim reportListId, reportListFile, reportListName
 reportListId = Array("132", "310", "316", "372")
@@ -100,7 +100,35 @@ If Not inBatch Then
     End Select
 End If
 
-' 3. Criar objeto HTTP com suporte a cookies e Headers de Navegador Real (Chrome)
+' 3. Definir pasta de destino interativamente
+defaultDestino = "C:\Users\maicon.bahls\Cocal\Recursos Humanos - 09_Selects\AUTOMAÇÃO"
+
+' Se a pasta padrao nao existir, tenta cria-la
+If Not objFSO.FolderExists(defaultDestino) Then
+    On Error Resume Next
+    CreateFolderChain objFSO, defaultDestino
+    If Err.Number <> 0 Then
+        ' Caso falhe, usa a pasta onde o script esta
+        defaultDestino = objFSO.GetParentFolderName(WScript.ScriptFullName)
+    End If
+    On Error GoTo 0
+End If
+
+' Abre a caixa de selecao de pasta nativa do Windows
+On Error Resume Next
+Set shellApp = CreateObject("Shell.Application")
+' &H0010 = BIF_RETURNONLYFSDIRS (somente pastas reais), &H0040 = BIF_USENEWUI (visual moderno com botao de criar pasta)
+Set folderObj = shellApp.BrowseForFolder(0, "Selecione a pasta onde os relatorios serão salvos:", &H0010 + &H0040, defaultDestino)
+
+If Err.Number = 0 And Not folderObj Is Nothing Then
+    diretorioDestino = folderObj.Self.Path
+Else
+    ' Se o usuario cancelar ou fechar a janela, usa a pasta padrao
+    diretorioDestino = defaultDestino
+End If
+On Error GoTo 0
+
+' 4. Criar objeto HTTP com suporte a cookies e Headers de Navegador Real (Chrome)
 Set xml = CreateObject("MSXML2.ServerXMLHTTP.6.0")
 
 ' Configurar URL de Login
@@ -109,7 +137,7 @@ loginUrl = "http://reportview.cocal.com.br/login.php"
 ' Codificar dados para evitar problemas com caracteres especiais (como @, #, $, etc.)
 payload = "usuario=" & window.encodeURIComponent(usuario) & "&senha=" & window.encodeURIComponent(senha)
 
-' 4. Efetuar Login (com cabecalho disfarce para simular Chrome)
+' 5. Efetuar Login (com cabecalho disfarce para simular Chrome)
 On Error Resume Next
 xml.open "POST", loginUrl, False
 xml.setRequestHeader "Content-Type", "application/x-www-form-urlencoded"
@@ -140,7 +168,7 @@ If InStr(responseText, "Login - Interview") > 0 Or InStr(responseText, "<!doctyp
     WScript.Quit
 End If
 
-' 5. Iniciar Excel
+' 6. Iniciar Excel
 On Error Resume Next
 Set objExcel = CreateObject("Excel.Application")
 If Err.Number <> 0 Then
@@ -150,24 +178,9 @@ End If
 On Error GoTo 0
 
 objExcel.Visible = False
-
-' 6. Definir pasta de destino
-diretorioDestino = "C:\Users\maicon.bahls\Cocal\Recursos Humanos - 09_Selects\AUTOMAÇÃO"
-
-' Criar pasta caso nao exista
-If Not objFSO.FolderExists(diretorioDestino) Then
-    On Error Resume Next
-    CreateFolderChain objFSO, diretorioDestino
-    If Err.Number <> 0 Then
-        ' Se falhar por falta de permissao, salva na mesma pasta do script
-        diretorioDestino = objFSO.GetParentFolderName(WScript.ScriptFullName)
-    End If
-    On Error GoTo 0
-End If
-
 dataAtual = Replace(FormatDateTime(Date, 2), "/", "-")
 
-' Executar Downloads
+' 7. Executar Downloads e Salvar
 If inBatch Then
     totalSuccess = 0
     For i = 0 To UBound(reportListId)
