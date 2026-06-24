@@ -18,12 +18,7 @@ reportListName = Array("Colaborador Senior", "Colaboradores Grupo - Geral", "Col
 Set objShell = CreateObject("WScript.Shell")
 Set objFSO = CreateObject("Scripting.FileSystemObject")
 
-' 1. Criar HTMLFile temporario para usar recursos de JavaScript (JSON.parse e encodeURIComponent)
-Set html = CreateObject("htmlfile")
-html.write "<meta http-equiv=""x-ua-compatible"" content=""IE=9"">"
-Set window = html.parentWindow
-
-' Inserir a funcao JavaScript que vai converter o JSON em TSV de forma ultra rapida
+' Codigo JavaScript para ser injetado de forma compativel com todas as versoes do Windows (IE9 ate Windows 11/Edge)
 Dim jsCode
 jsCode = "function generateTSV(jsonText) {" & _
          "    var data = JSON.parse(jsonText);" & _
@@ -59,7 +54,10 @@ jsCode = "function generateTSV(jsonText) {" & _
          "    return JSON.parse(jsonText).valores.length;" & _
          "}"
 
-window.execScript jsCode, "JScript"
+' 1. Criar HTMLFile temporario injetando o script diretamente no HTML para evitar o execScript (depreciado no Windows moderno)
+Set html = CreateObject("htmlfile")
+html.write "<html><head><meta http-equiv=""x-ua-compatible"" content=""IE=9""><script>" & jsCode & "</script></head><body></body></html>"
+Set window = html.parentWindow
 
 ' 2. Solicitar credenciais ao usuario de forma amigavel
 usuario = InputBox("Digite seu usuario do Interview:", "Login Interview - Cocal", "maicon.bahls")
@@ -129,8 +127,22 @@ End If
 ' Abrir caixa de selecao de pasta moderna do Windows
 diretorioDestino = SelecionarPasta(defaultDestino)
 
-' 4. Criar objeto HTTP com suporte a cookies e Headers de Navegador Real (Chrome)
+' 4. Criar objeto HTTP com suporte a fallbacks (garante funcionamento em qualquer Windows)
+On Error Resume Next
 Set xml = CreateObject("MSXML2.ServerXMLHTTP.6.0")
+If Err.Number <> 0 Then
+    Err.Clear
+    Set xml = CreateObject("MSXML2.XMLHTTP.6.0")
+End If
+If Err.Number <> 0 Then
+    Err.Clear
+    Set xml = CreateObject("Microsoft.XMLHTTP")
+End If
+If Err.Number <> 0 Then
+    MsgBox "Erro ao inicializar componente de rede (MSXML). Seu Windows pode estar com restricoes de seguranca.", vbCritical, "Erro de Inicializacao"
+    WScript.Quit
+End If
+On Error GoTo 0
 
 ' Configurar URL de Login
 loginUrl = "http://reportview.cocal.com.br/login.php"
